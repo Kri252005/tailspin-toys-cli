@@ -1,6 +1,60 @@
 import { test, expect, type Response } from '@playwright/test';
 
 test.describe('Game Listing and Navigation', () => {
+  test('should filter games by category and publisher', async ({ page }) => {
+    await test.step('Navigate to homepage', async () => {
+      await page.goto('/');
+      await expect(page.getByTestId('game-filters')).toBeVisible();
+    });
+
+    await test.step('Filter by category', async () => {
+      await page.getByTestId('category-filter').selectOption({ label: 'Strategy' });
+
+      await expect(page.locator('[data-testid="game-card"]:not([hidden])')).toHaveCount(4);
+      await expect(page).toHaveURL(/category=\d+/);
+    });
+
+    await test.step('Combine category and publisher filters', async () => {
+      await page.getByTestId('publisher-filter').selectOption({ label: 'DevMasters Inc.' });
+
+      await expect(page.locator('[data-testid="game-card"]:not([hidden])')).toHaveCount(1);
+      await expect(page.locator('[data-testid="game-card"]:not([hidden])').getByTestId('game-title')).toHaveText('Pipeline Conquest');
+      await expect(page).toHaveURL(/category=\d+&publisher=\d+/);
+    });
+  });
+
+  test('should show an empty state and clear filters when no games match', async ({ page }) => {
+    let initialGameCount: number;
+
+    await test.step('Navigate to homepage', async () => {
+      await page.goto('/');
+      await expect(page.getByTestId('game-filters')).toBeVisible();
+      initialGameCount = await page.locator('[data-testid="game-card"]:not([hidden])').count();
+      await page.evaluate(() => {
+        const categoryFilter = document.querySelector<HTMLSelectElement>('[data-testid="category-filter"]');
+        if (!categoryFilter) throw new Error('Category filter is missing');
+
+        const unknownCategory = new Option('Unknown category', '99999', true, true);
+        categoryFilter.append(unknownCategory);
+        categoryFilter.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    });
+
+    await test.step('Select filters with no matching games', async () => {
+      await expect(page.getByTestId('filtered-empty-state')).toBeVisible();
+      await expect(page.getByTestId('empty-state-text')).toHaveText('No games match the selected filters.');
+      await expect(page.locator('[data-testid="game-card"]:not([hidden])')).toHaveCount(0);
+    });
+
+    await test.step('Clear filters', async () => {
+      await page.getByTestId('clear-filters').click();
+
+      await expect(page.getByTestId('filtered-empty-state')).toBeHidden();
+      await expect(page.locator('[data-testid="game-card"]:not([hidden])')).toHaveCount(initialGameCount);
+      await expect(page).toHaveURL('/');
+    });
+  });
+
   test('should display games with titles on index page', async ({ page }) => {
     await test.step('Navigate to homepage', async () => {
       await page.goto('/');
